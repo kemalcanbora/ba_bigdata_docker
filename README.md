@@ -26,6 +26,11 @@ When opening Hue, you might encounter ```NoReverseMatch: u'about' is not a regis
  * URL: http://localhost:8000/ 
  * Username: admin
  * Password: admin 
+
+## Possible Kafka Problems
+If you have any problem on Kafka probably you can edit to ```/etc/hosts```
+ * Add the entry  ```127.0.0.1  kafka```
+
 ## Jupyter Token Solution
 Step by step;
 
