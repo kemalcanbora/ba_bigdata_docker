@@ -15,11 +15,17 @@ To start an HDFS/Spark Workbench:
 * Spark-notebook: http://localhost:9001
 * PySpark-notebook: http://localhost:8888
 * Hue (HDFS Filebrowser): http://localhost:8088/home
+* Kafka Rest UI : http://localhost:8000/
 
 ## Important
 
 When opening Hue, you might encounter ```NoReverseMatch: u'about' is not a registered namespace``` error after login. I disabled 'about' page (which is default one), because it caused docker container to hang. To access Hue when you have such an error, you need to append /home to your URI: ```http://docker-host-ip:8088/home```
  
+## Kafka Rest UI
+ If you check your kafka on the UI you need password and username. <br>
+ * URL: http://localhost:8000/ 
+ * Username: admin
+ * Password: admin 
 ## Jupyter Token Solution
 Step by step;
 
