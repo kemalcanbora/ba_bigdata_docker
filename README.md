@@ -4,7 +4,10 @@ To start an HDFS/Spark Workbench:
 ```
     docker-compose up -d
 ```
- 
+## How to Install this Big Data Docker
+* Copy install.sh to localhost(e.g. /home, /root) it doesn't matter to docker
+* ```sudo chmod +x ./install.sh``` or ```sudo chmod 777 ./install.sh```
+* ```sudo ./install.sh```
 ## Interfaces
 
 * Namenode: http://localhost:50070
