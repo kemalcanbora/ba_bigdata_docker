@@ -1,5 +1,9 @@
 version: '2'
 services:
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    ports:
+      - 2181:2181
 
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
@@ -12,14 +16,16 @@ services:
       - ./hadoop-hive.env
     ports:
       - "50070:50070"
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.5
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
     container_name: datanode
     volumes:
       - /tmp/hdfs/datanode:/hadoop/dfs/data
-      - ./:/bank
+      - ./bank:/bank
     env_file:
       - ./hadoop-hive.env
     environment:
@@ -28,7 +34,9 @@ services:
       - namenode
     ports:
       - "50075:50075"
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.6
 
   hive-server:
     image: bde2020/hive:2.3.2-postgresql-metastore
@@ -42,7 +50,9 @@ services:
       - "10000:10000"
     depends_on:
       - hive-metastore
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.7
 
   hive-metastore:
     image: bde2020/hive:2.3.2-postgresql-metastore
@@ -56,14 +66,18 @@ services:
       - "9083:9083"
     depends_on:
       - hive-metastore-postgresql
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.8
 
   hive-metastore-postgresql:
     image: bde2020/hive-metastore-postgresql:2.3.0
     container_name: hive-metastore-postgresql
     depends_on:
       - datanode
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.9
 
   spark-master:
     image: bde2020/spark-master:2.4.0-hadoop2.7
@@ -75,7 +89,9 @@ services:
       - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
     env_file:
       - ./hadoop-hive.env
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.10
 
   spark-worker:
     image: bde2020/spark-worker:2.4.0-hadoop2.7
@@ -92,7 +108,9 @@ services:
       - 8081:8081
     env_file:
       - ./hadoop-hive.env
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.11
 
   zeppelin:
     image: openkbs/docker-spark-bde2020-zeppelin
@@ -114,20 +132,23 @@ services:
       - /tmp/simple-demo/zeppelin/data:/usr/lib/zeppelin/data:rw
       - /tmp/simple-demo/zeppelin/notebook:/usr/lib/zeppelin/notebook:rw
     command: /usr/lib/zeppelin/bin/zeppelin.sh
-
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.12
 
   hue:
       image: gethue/hue:20191107-135001
       hostname: hue
       container_name: hue
-      dns: 8.8.8.8
       ports:
       - "8888:8888"
       volumes:
         - ./hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
       depends_on:
       - "database"
-
+      networks:
+        net_pet:
+          ipv4_address: 172.27.1.13
 
   database:
       image: mysql:5.7
@@ -144,63 +165,71 @@ services:
           MYSQL_DATABASE: hue
           MYSQL_USER: root
           MYSQL_PASSWORD: secret
-
+      networks:
+        net_pet:
+          ipv4_address: 172.27.1.14
 
   streamsets:
     image: streamsets/datacollector:3.13.0-latest
     ports:
       - "18630:18630"
-
-
-  zookeeper:
-    image: wurstmeister/zookeeper:latest
-    restart: on-failure
-    ports:
-      - 2181:2181
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.17
 
   kafka:
-      image: wurstmeister/kafka:0.10.2.1
-      ports:
-        - "9092:9092"
-      links:
-        - zookeeper
-      depends_on:
-        - zookeeper
-      environment:
-        # add the entry "127.0.0.1    kafka" to your /etc/hosts file
-        KAFKA_BROKER_ID: 1
-        KAFKA_PORT: 9092
-        KAFKA_ADVERTISED_HOST_NAME: "kafka"
-        KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
-        KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-        KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    image: wurstmeister/kafka:0.10.2.1
+    ports:
+      - "9092:9092"
+    links:
+      - zookeeper
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_PORT: 9092
+      KAFKA_ADVERTISED_HOST_NAME: "kafka"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "test:1:1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
   kafka-rest:
-      image: nodefluent/kafka-rest
-      ports:
-        - 8082:8082
-      links:
-        - kafka
-        - zookeeper
-      depends_on:
-        - kafka
-        - zookeeper
-      environment:
-        DEBUG: "*"
+    image: nodefluent/kafka-rest
+    ports:
+      - 8082:8082
+    links:
+      - kafka
+      - zookeeper
+    depends_on:
+      - kafka
+      - zookeeper
+    environment:
+      DEBUG: "*"
 
   kafka-rest-ui:
-      image: nodefluent/kafka-rest-ui
-      ports:
-        - 8000:8000
-      links:
-        - kafka-rest
-      depends_on:
-        - kafka-rest
-      environment:
-        DEBUG: "*"
-        REACT_APP_KAFKA_REST_URL: "http://kafka-rest:8082/"
-        REACT_APP_TIMEOUT: "3000"
-        PROXY: "yes"
-        BASIC_AUTH_USER: "admin"
-        BASIC_AUTH_PASSWORD: "admin"
+    image: nodefluent/kafka-rest-ui
+    ports:
+      - 8000:8000
+    links:
+      - kafka-rest
+    depends_on:
+      - kafka-rest
+    environment:
+      DEBUG: "*"
+      REACT_APP_KAFKA_REST_URL: "http://kafka-rest:8082/"
+      REACT_APP_TIMEOUT: "3000"
+      PROXY: "yes"
+      BASIC_AUTH_USER: "admin"
+      BASIC_AUTH_PASSWORD: "admin"
+
+networks:
+  net_pet:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.27.0.0/16
+
+
 
