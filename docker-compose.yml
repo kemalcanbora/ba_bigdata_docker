@@ -1,5 +1,157 @@
-version: '2' 
+version: '2'
 services:
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    container_name: namenode
+    volumes:
+      - /tmp/hdfs/namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop-hive.env
+    ports:
+      - "50070:50070"
+
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    container_name: datanode
+    volumes:
+      - /tmp/hdfs/datanode:/hadoop/dfs/data
+      - ./:/bank
+    env_file:
+      - ./hadoop-hive.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070"
+    depends_on:
+      - namenode
+    ports:
+      - "50075:50075"
+
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    env_file:
+      - ./hadoop-hive.env
+    environment:
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore/metastore"
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+    ports:
+      - "10000:10000"
+    depends_on:
+      - hive-metastore
+
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    env_file:
+      - ./hadoop-hive.env
+    command: /opt/hive/bin/hive --service metastore
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070 datanode:50075 hive-metastore-postgresql:5432"
+    ports:
+      - "9083:9083"
+    depends_on:
+      - hive-metastore-postgresql
+
+
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: hive-metastore-postgresql
+    depends_on:
+      - datanode
+
+
+  spark-master:
+    image: bde2020/spark-master:2.4.0-hadoop2.7
+    container_name: spark-master
+    ports:
+      - 8080:8080
+      - 7077:7077
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    env_file:
+      - ./hadoop-hive.env
+
+
+  spark-worker:
+    image: bde2020/spark-worker:2.4.0-hadoop2.7
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore/metastore
+    depends_on:
+      - spark-master
+    ports:
+      - 8081:8081
+    env_file:
+      - ./hadoop-hive.env
+
+
+  zeppelin:
+    image: openkbs/docker-spark-bde2020-zeppelin
+    container_name: zeppelin
+    environment:
+      CORE_CONF_fs_defaultFS: "hdfs://namenode:8020"
+      SPARK_MASTER: "spark://spark-master:7077"
+      MASTER: "spark://spark-master:7077"
+      SPARK_MASTER_URL: spark://spark-master:7077
+      ZEPPELIN_PORT: 8080
+      ZEPPELIN_JAVA_OPTS:
+        -Dspark.driver.memory=1g
+        -Dspark.executor.memory=2g
+    ports:
+      - 19090:8080
+    env_file:
+      - ./hadoop-hive.env
+    volumes:
+      - /tmp/simple-demo/zeppelin/data:/usr/lib/zeppelin/data:rw
+      - /tmp/simple-demo/zeppelin/notebook:/usr/lib/zeppelin/notebook:rw
+    command: /usr/lib/zeppelin/bin/zeppelin.sh
+
+
+  hue:
+      image: gethue/hue:20191107-135001
+      hostname: hue
+      container_name: hue
+      dns: 8.8.8.8
+      ports:
+      - "8888:8888"
+      volumes:
+        - ./hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
+      depends_on:
+      - "database"
+
+
+  database:
+      image: mysql:5.7
+      container_name: database
+      ports:
+          - "33061:3306"
+      command: --init-file /data/application/init.sql
+      volumes:
+          - /tmp/mysql/data:/var/lib/mysql
+          - ./init.sql:/data/application/init.sql
+      environment:
+          MYSQL_ROOT_USER: root
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: hue
+          MYSQL_USER: root
+          MYSQL_PASSWORD: secret
+
+
+  streamsets:
+    image: streamsets/datacollector:3.13.0-latest
+    ports:
+      - "18630:18630"
+
+
   zookeeper:
     image: wurstmeister/zookeeper:latest
     restart: on-failure
@@ -52,68 +204,3 @@ services:
         BASIC_AUTH_USER: "admin"
         BASIC_AUTH_PASSWORD: "admin"
 
-  namenode:
-    image: bde2020/hadoop-namenode:1.1.0-hadoop2.8-java8
-    container_name: namenode
-    volumes:
-      - ./data/namenode:/hadoop/dfs/name
-    environment:
-      - CLUSTER_NAME=test
-    env_file:
-      - ./hadoop.env
-    ports:
-      - 50070:50070
-
-  datanode:
-    image: bde2020/hadoop-datanode:1.1.0-hadoop2.8-java8
-    depends_on:
-      - namenode
-    volumes:
-      - ./data/datanode:/hadoop/dfs/data
-    env_file:
-      - ./hadoop.env
-    ports:
-      - 50075:50075
-
-  hue:
-    image: bde2020/hdfs-filebrowser:3.11
-    ports:
-      - 8088:8088
-    environment:
-      - NAMENODE_HOST=namenode
-
-  spark-master:
-    image: bde2020/spark-master:2.4.0-hadoop2.7
-    container_name: spark-master
-    env_file:
-      - ./hadoop.env
-    ports:
-      - 8080:8080
-      - 7077:7077
-
-  spark-worker:
-      image: bde2020/spark-worker:2.4.0-hadoop2.7
-      depends_on:
-        - spark-master
-      environment:
-        - SPARK_MASTER=spark://spark-master:7077
-      env_file:
-        - ./hadoop.env
-      ports:
-        - 8081:8081
-
-  pyspark-notebook:
-    image: jupyter/pyspark-notebook
-    ports:
-      - "8888:8888"
-      - "4040-4080:4040-4080"
-    volumes:
-      - ./pyspark-notebook-data:/opt/docker/notebooks
-
-  spark-notebook:
-    image: andypetrella/spark-notebook:0.7.0-scala-2.11.8-spark-2.1.0-hadoop-2.7.3
-    volumes:
-      - ./spark-notebook-data:/opt/docker/notebooks
-      - ./data:/opt/docker/data
-    ports:
-      - 9001:9001
